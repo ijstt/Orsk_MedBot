@@ -1,0 +1,4 @@
+pip install logging
+pip install sqlite3
+pip install aiogram
+pip install requests
