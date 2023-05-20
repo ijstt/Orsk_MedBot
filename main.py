@@ -1,7 +1,9 @@
 import logging
 import sqlite3
-
 import requests
+import pymorphy3
+import datetime
+
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.dispatcher import FSMContext
@@ -20,7 +22,7 @@ bot = Bot(token=config.TOKEN)
 dp = Dispatcher(bot, storage=storage)
 
 
-class BoleznStates(StatesGroup):
+class AllStates(StatesGroup):
     waiting_for_support = State()
 
     gl_q1 = State()
@@ -29,24 +31,28 @@ class BoleznStates(StatesGroup):
     gl_q4 = State()
     gl_q5 = State()
     gl_answ = State()
+
     zh_q1 = State()
     zh_q2 = State()
     zh_q3 = State()
     zh_q4 = State()
     zh_q5 = State()
     zh_answ = State()
+
     zub_q1 = State()
     zub_q2 = State()
     zub_q3 = State()
     zub_q4 = State()
     zub_q5 = State()
     zub_answ = State()
+
     ru_q1 = State()
     ru_q2 = State()
     ru_q3 = State()
     ru_q4 = State()
     ru_q5 = State()
     ru_answ = State()
+
     uh_q1 = State()
     uh_q2 = State()
     uh_q3 = State()
@@ -57,6 +63,7 @@ class BoleznStates(StatesGroup):
     c1_st = State()
     admin_st = State()
     photo_st = State()
+    vopr_st = State()
 
 
 # функция, которая создает инлайн-клавиатуры с входным массивом кнопок
@@ -74,22 +81,20 @@ def create_inline_keyboard(array_of_buttons, size):
 @dp.message_handler(commands=['start'])
 async def send_welcome(message: types.Message):
     await bot.send_message(chat_id=message.from_user.id,
-                           text=f"Привет {message.from_user.full_name}!\n{config.HI}",
-                           parse_mode="HTML", reply_markup=kb.menu)
+                           text=f"Привет {message.from_user.full_name}!\n{config.HI}", reply_markup=kb.menu)
 
     await bot.send_message(chat_id=message.from_user.id,
-                           text=f"Вот мои функции -",
+                           text=config.VOT,
                            reply_markup=kb.main_inline_menu)
 
 
 # специальная команда только для администратора
 @dp.message_handler(commands=['admin'])
 async def send_welcome(message: types.Message):
-    await BoleznStates.admin_st.set()
+    await AllStates.admin_st.set()
     await bot.send_message(chat_id=message.from_user.id,
-                           text=f"Добро пожаловать в режим администратора",
-                           parse_mode="HTML", reply_markup=kb.menu)
-    await message.answer("Введите номер вопроса, который решен:")
+                           text=config.ADMHI, reply_markup=kb.menu)
+    await message.answer(config.ADMNUM)
     conn = sqlite3.connect(config.sql)
     curs = conn.cursor()
     res_support = curs.execute(f'''SELECT id, id_user, quest FROM support''').fetchall()
@@ -99,8 +104,9 @@ async def send_welcome(message: types.Message):
 
     conn.commit()
 
+
 # функции админа
-@dp.message_handler(state=BoleznStates.admin_st)
+@dp.message_handler(state=AllStates.admin_st)
 async def admin_support(message: types.Message, state: FSMContext):
     num_quest = int(message.text)
 
@@ -110,7 +116,7 @@ async def admin_support(message: types.Message, state: FSMContext):
     curs.execute('''DELETE FROM support WHERE id == ?''', (num_quest,))
     conn.commit()
 
-    await message.answer(text="Вопрос удален",
+    await message.answer(text=config.QUEDEL,
                          reply_markup=kb.main_inline_menu)
     await state.finish()
 
@@ -118,12 +124,12 @@ async def admin_support(message: types.Message, state: FSMContext):
 # пункт 5 задания
 @dp.message_handler(content_types=['text'], text="☎ Обратиться в поддержку")
 async def waiting_for_support(message: types.Message):
-    await BoleznStates.waiting_for_support.set()
-    await message.answer("Введите Ваш вопрос:")
+    await AllStates.waiting_for_support.set()
+    await message.answer(config.ANSAS)
 
 
 # функция обращения в тех поддержку
-@dp.message_handler(state=BoleznStates.waiting_for_support)
+@dp.message_handler(state=AllStates.waiting_for_support)
 async def process_support(message: types.Message, state: FSMContext):
     id_us = message.from_user.username
     mes = message.text
@@ -157,47 +163,47 @@ async def back(message: types.Message):
 @dp.message_handler(text=['🧠 Голова'])
 async def g1_st(message: types.Message):
     await message.answer(text="Ответьте на несоклько вопросов")
-    await BoleznStates.gl_q1.set()
+    await AllStates.gl_q1.set()
     await message.answer(text="Как давно болит голова?<b>\nДавно/Недавно/Не знаю</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.gl_q1)
-async def g1_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.gl_q1)
+async def g1_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_1'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Может быть вы упали? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.gl_q2)
-async def g2_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.gl_q2)
+async def g2_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_2'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Мерили давление? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.gl_q3)
-async def g3_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.gl_q3)
+async def g3_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_3'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вы уже приняли лекарство? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.gl_q4)
-async def g4_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.gl_q4)
+async def g4_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_4'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="У вас сильно болит голова? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.gl_q5)
-async def g5_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.gl_q5)
+async def g5_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_5'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
 
     async with state.proxy() as data:
         # ответ на результаты исследования при выборе головы
@@ -224,6 +230,10 @@ async def g5_q(message: types.Message, state: BoleznStates):
                 text="Видимо вы сильно упали, советуем записаться к врачу на диагностику головы",
                 reply_markup=kb.inline_kb1)
 
+        elif (data['1_1'] == "Нет" or data['1_1'] == "Не знаю") and data['1_2'] == "Нет" and data['1_3'] == "Нет" \
+                and data['1_4'] == "Нет" and data['1_5'] == "Нет":
+            await message.answer(text="Может у вас ничего не болит?", reply_markup=kb.inline_kb1)
+
         else:
             await message.answer(text="Советуем выпить лекарства и подождать,"
                                       " если не помогло - вернитесь назад и нажмите на кнопку 📋 Записаться к врачу")
@@ -235,47 +245,47 @@ async def g5_q(message: types.Message, state: BoleznStates):
 @dp.message_handler(text=['❤ Живот'])
 async def zh1_st(message: types.Message):
     await message.answer(text="Ответьте на несоклько вопросов")
-    await BoleznStates.zh_q1.set()
+    await AllStates.zh_q1.set()
     await message.answer(text="Как давно болит живот? <b>\nДавно/Недавно/Не знаю</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zh_q1)
-async def zh1_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zh_q1)
+async def zh1_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_1'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Может быть вы ушиблись? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zh_q2)
-async def zh2_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zh_q2)
+async def zh2_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_2'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="У вас есть темпреатура? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zh_q3)
-async def zh3_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zh_q3)
+async def zh3_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_3'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вы уже приняли лекарство? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zh_q4)
-async def zh4_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zh_q4)
+async def zh4_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_4'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="У вас сильно болит живот? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zh_q5)
-async def zh5_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zh_q5)
+async def zh5_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_5'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
 
     async with state.proxy() as data:
         # ответ на результаты исследования при выборе головы
@@ -303,6 +313,10 @@ async def zh5_q(message: types.Message, state: BoleznStates):
                 text="Видимо вы просто ударились, советуем записаться к врачу на диагностику живота",
                 reply_markup=kb.inline_kb1)
 
+        elif (data['1_1'] == "Нет" or data['1_1'] == "Не знаю") and data['1_2'] == "Нет" and data['1_3'] == "Нет" \
+                and data['1_4'] == "Нет" and data['1_5'] == "Нет":
+            await message.answer(text="Может у вас ничего не болит?", reply_markup=kb.inline_kb1)
+
         else:
             await message.answer(text="Советуем выпить лекарства и подождать,"
                                       " если не помогло - вернитесь назад и нажмите на кнопку 📋 Записаться к врачу")
@@ -314,47 +328,47 @@ async def zh5_q(message: types.Message, state: BoleznStates):
 @dp.message_handler(text=['🦷 Зубы'])
 async def z_st(message: types.Message):
     await message.answer(text="Ответьте на несоклько вопросов")
-    await BoleznStates.zub_q1.set()
+    await AllStates.zub_q1.set()
     await message.answer(text="Как давно у вас болят зубы? <b>\nДавно/Недавно/Не знаю</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zub_q1)
-async def z1_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zub_q1)
+async def z1_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_1'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Могли ли произойти скол кусочка зуба? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zub_q2)
-async def z2_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zub_q2)
+async def z2_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_2'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Чистите ли вы зубы 2 раза в день? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zub_q3)
-async def z3_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zub_q3)
+async def z3_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_3'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вы уже выпили лекарство? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zub_q4)
-async def z4_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zub_q4)
+async def z4_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_4'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Ели ли вы кислое/фрукты недавно? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.zub_q5)
-async def z5_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.zub_q5)
+async def z5_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_5'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
 
     async with state.proxy() as data:
         # ответ на результаты исследования при выборе головы
@@ -381,6 +395,10 @@ async def z5_q(message: types.Message, state: BoleznStates):
                 text="Видимо вы скололи небольшой кусочек зуба, советуем записаться к стоматологу",
                 reply_markup=kb.inline_kb1)
 
+        elif (data['1_1'] == "Нет" or data['1_1'] == "Не знаю") and data['1_2'] == "Нет" and data['1_3'] == "Нет" \
+                and data['1_4'] == "Нет" and data['1_5'] == "Нет":
+            await message.answer(text="Может у вас ничего не болит?", reply_markup=kb.inline_kb1)
+
         else:
             await message.answer(text="Советуем выпить лекарства и подождать,"
                                       " если не помогло - вернитесь назад и нажмите на кнопку 📋 Записаться к врачу")
@@ -392,47 +410,47 @@ async def z5_q(message: types.Message, state: BoleznStates):
 @dp.message_handler(text=['💪 Рука или нога'])
 async def r1_st(message: types.Message):
     await message.answer(text="Ответьте на несоклько вопросов")
-    await BoleznStates.ru_q1.set()
+    await AllStates.ru_q1.set()
     await message.answer(text="Как давно у вас болит конечность? <b>\nДавно/Недавно/Не знаю</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.ru_q1)
-async def r1_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.ru_q1)
+async def r1_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_1'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Может вы ушиблись? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.ru_q2)
-async def r2_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.ru_q2)
+async def r2_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_2'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="У вас есть синяк на конечности? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.ru_q3)
-async def r3_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.ru_q3)
+async def r3_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_3'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вас мог кто-то укусить? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.ru_q4)
-async def r4_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.ru_q4)
+async def r4_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_4'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Сильно ли болит конечность? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.ru_q5)
-async def r5_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.ru_q5)
+async def r5_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_5'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
 
     async with state.proxy() as data:
         # ответ на результаты исследования при выборе головы
@@ -459,6 +477,10 @@ async def r5_q(message: types.Message, state: BoleznStates):
             await message.answer(
                 text="Возможно вы не сильно ударились, через некоторое время пройдет")
 
+        elif (data['1_1'] == "Нет" or data['1_1'] == "Не знаю") and data['1_2'] == "Нет" and data['1_3'] == "Нет" \
+                and data['1_4'] == "Нет" and data['1_5'] == "Нет":
+            await message.answer(text="Может у вас ничего не болит?", reply_markup=kb.inline_kb1)
+
         else:
             await message.answer(text="Советуем выпить обезболивающее и подождать, если не помогло - вернитесь"
                                       " назад и нажмите на кнопку 📋 Записаться к врачу")
@@ -470,47 +492,47 @@ async def r5_q(message: types.Message, state: BoleznStates):
 @dp.message_handler(text=['👂 Ухо'])
 async def u1_st(message: types.Message):
     await message.answer(text="Ответьте на несоклько вопросов")
-    await BoleznStates.uh_q1.set()
+    await AllStates.uh_q1.set()
     await message.answer(text="Как давно у вас болит ухо? <b>\nДавно/Недавно/Не знаю</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.uh_q1)
-async def u1_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.uh_q1)
+async def u1_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_1'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Оно звенит? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.uh_q2)
-async def u2_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.uh_q2)
+async def u2_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_2'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вы стали хуже слышать? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.uh_q3)
-async def u3_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.uh_q3)
+async def u3_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_3'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Вы болеете? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.uh_q4)
-async def u4_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.uh_q4)
+async def u4_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_4'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
     await message.answer(text="Сильно ли болит ухо? <b>\nДа/Нет</b>", parse_mode='HTML')
 
 
-@dp.message_handler(state=BoleznStates.uh_q5)
-async def u5_q(message: types.Message, state: BoleznStates):
+@dp.message_handler(state=AllStates.uh_q5)
+async def u5_q(message: types.Message, state: AllStates):
     async with state.proxy() as data:
         data['1_5'] = message.text
-    await BoleznStates.next()
+    await AllStates.next()
 
     async with state.proxy() as data:
         # ответ на результаты исследования при выборе головы
@@ -537,9 +559,14 @@ async def u5_q(message: types.Message, state: BoleznStates):
             await message.answer(
                 text="Попробуйте прочистить уши, возможно они забились")
 
+        elif (data['1_1'] == "Нет" or data['1_1'] == "Не знаю") and data['1_2'] == "Нет" and data['1_3'] == "Нет" \
+                and data['1_4'] == "Нет" and data['1_5'] == "Нет":
+            await message.answer(text="Может у вас ничего не болит?", reply_markup=kb.inline_kb1)
+
         else:
             await message.answer(
-                text="Советуем выпить лекарства и подождать,если не помогло - вернитесь назад и нажмите на кнопку 📋 Записаться к врачу")
+                text="Советуем выпить лекарства и подождать,если не помогло - вернитесь назад и"
+                     " нажмите на кнопку 📋 Записаться к врачу")
 
     await state.finish()
 
@@ -547,7 +574,6 @@ async def u5_q(message: types.Message, state: BoleznStates):
 # задание 4
 @dp.callback_query_handler(lambda c: c.data, state='*')
 async def inline_kb_answer_callback_handler(query: types.CallbackQuery, state: FSMContext):
-    # async def docs(message: types.Message):
     # выбрали города из нашей БД
     conn = sqlite3.connect(config.sql)
     curs = conn.cursor()
@@ -617,7 +643,7 @@ async def inline_kb_answer_callback_handler(query: types.CallbackQuery, state: F
                                     text=f"Список отделений города {c1[0]}", reply_markup=back_keyboard_city1)
     elif answer == 'stuff1':
         # список всех сотрудников города city1 - Орск
-        await BoleznStates.photo_st.set()
+        await AllStates.photo_st.set()
 
         conn = sqlite3.connect(config.sql)
         curs = conn.cursor()
@@ -653,7 +679,7 @@ async def inline_kb_answer_callback_handler(query: types.CallbackQuery, state: F
         main_button = types.InlineKeyboardButton(text='Главное меню', callback_data='main_menu')
         inf_keyboard.add(main_button)
 
-        INF_MESS = f'''
+        inf_mess = f'''
         ℹ ИНФОРМАЦИЯ ОБ УЧРЕЖДЕНИИ ℹ
         НАИМЕНОВАНИЕ УЧРЕЖДЕНИЯ: {inf_res[0][0]}
         АДРЕС: {inf_res[0][1]}
@@ -673,9 +699,10 @@ async def inline_kb_answer_callback_handler(query: types.CallbackQuery, state: F
                 point = "{ll},pm2vvl".format(ll=ll)
                 static_api_request = "http://static-maps.yandex.ru/1.x/?ll={ll}&spn={spn}&l=map&pt={point}". \
                     format(**locals())
-                await bot.send_photo(chat_id=chat_id, photo=static_api_request, caption=INF_MESS)
+                await bot.send_photo(chat_id=chat_id, photo=static_api_request, caption=inf_mess)
                 await bot.send_message(chat_id=chat_id,
-                                       text=f"Температура в {inf_res[0][1]} сейчас {weather['main']['temp']} градусов, а по ощущениям {weather['main']['feels_like']} градусов",
+                                       text=f"Температура в {inf_res[0][1]} сейчас {weather['main']['temp']} градусов,"
+                                            f" а по ощущениям {weather['main']['feels_like']} градусов",
                                        reply_markup=inf_keyboard)
         except RuntimeError as ex:
             await bot.reply_text(str(ex))
@@ -723,6 +750,56 @@ async def city1(callback: types.CallbackQuery):
 async def city1(callback: types.CallbackQuery):
     await callback.message.answer("Список врачей города3")
     await callback.answer()
+
+
+@dp.message_handler(text=['❔ Задать вопрос'])
+async def z_st(message: types.Message):
+    await message.answer(text="Задайте вопрос и я постараюсь на него ответить")
+    await AllStates.vopr_st.set()
+
+
+@dp.message_handler(state=AllStates.vopr_st)
+async def vopr(message: types.Message, state: AllStates):
+    time = ["время", "час", "который", "скажи", "сколько"]
+    doc = ["как", "запись", "записаться", "врач", "к", "где", "доктор", "терапевт", "стоматолог",
+           "окулист", "лор", "нарколог"]
+    bolit = ["болит", "что", "делать", "если", "у", "меня", "болеть"]
+    admin = ["как", "админ", "администратор", "связь", "связать", "написать", "тех", "поддержка", "обратиться"]
+    morph = pymorphy3.MorphAnalyzer()
+    p = morph.parse(str(message.text).lower())[0]
+    sovpadenie_time = 0
+    sovpadenie_doc = 0
+    sovpadenie_bolit = 0
+    sovpadenie_admin = 0
+    for word in p[0].split():
+        if word in time:
+            sovpadenie_time += 1
+            continue
+        elif word in doc:
+            sovpadenie_doc += 1
+            continue
+        elif word in bolit:
+            sovpadenie_bolit += 1
+            continue
+        elif word in admin:
+            sovpadenie_admin += 1
+            continue
+
+    if sovpadenie_time > 1:
+        now = datetime.datetime.now()
+        await message.reply(f'Сейчас - {now.strftime("%d-%m-%Y %H:%M:%S")}')
+    if sovpadenie_doc > 2:
+        await message.reply(f"Для записи к врачу нажмите на <b>кнопку</b> ниже",
+                            reply_markup=kb.inline_kb1, parse_mode='HTML')
+    if sovpadenie_bolit > 2:
+        await message.reply(f"Советую пройти в раздел <b>Симптомы</b> и пройти тест, или же запишитесь к врачу"
+                            f" на прием по ссылке ниже", reply_markup=kb.inline_kb1, parse_mode='HTML')
+    if sovpadenie_doc > 2:
+        await message.reply(f"Для связи с тех поддержкой перейдите в раздел <b>Обратиться в поддержку</b>",
+                            parse_mode='HTML')
+    else:
+        await message.reply(f"Задайте другой вопрос")
+    await state.finish()
 
 
 # функция ответа на неизвестный текст/команду
